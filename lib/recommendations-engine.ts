@@ -1,5 +1,4 @@
 import { UserPreferencesService, type UserPreferences } from "./user-preferences"
-import { WeatherService } from "./weather-service"
 import { TransportationCalculator } from "./transportation-calculator"
 
 interface RouteHistory {
@@ -79,10 +78,6 @@ export class RecommendationsEngine {
     const history = this.getRouteHistory()
     const context = await this.getContextualFactors()
 
-    // Weather-based recommendations
-    const weatherRecs = this.getWeatherRecommendations(context.weather, preferences)
-    recommendations.push(...weatherRecs)
-
     // Time-based recommendations
     const timeRecs = this.getTimeBasedRecommendations(context, history, preferences)
     recommendations.push(...timeRecs)
@@ -119,65 +114,13 @@ export class RecommendationsEngine {
     else if (hour >= 17 && hour < 22) timeOfDay = "evening"
     else timeOfDay = "night"
 
-    const weather = await WeatherService.getCurrentWeather()
-
     return {
       timeOfDay,
       dayOfWeek: dayOfWeek === 0 || dayOfWeek === 6 ? "weekend" : "weekday",
-      weather,
+      weather: null, // Set weather to null
       campusEvents: this.getMockCampusEvents(),
       busyLocations: this.getMockBusyLocations(timeOfDay),
     }
-  }
-
-  private static getWeatherRecommendations(weather: any, preferences: UserPreferences): SmartRecommendation[] {
-    const recommendations: SmartRecommendation[] = []
-
-    if (weather.condition.includes("Rain")) {
-      recommendations.push({
-        type: "weather",
-        title: "Rainy Weather Alert",
-        description: "Consider using Crimson Ride or covered walkways today",
-        priority: "high",
-        icon: "🌧️",
-        action: "View covered routes",
-      })
-    }
-
-    if (weather.temperature > 85 && preferences.preferredModes.includes("walking")) {
-      recommendations.push({
-        type: "weather",
-        title: "Hot Weather Advisory",
-        description: `It's ${weather.temperature}°F outside. Stay hydrated and consider air-conditioned transportation`,
-        priority: "medium",
-        icon: "🌡️",
-        action: "See cooler alternatives",
-      })
-    }
-
-    if (weather.temperature < 35 && preferences.preferredModes.includes("bike")) {
-      recommendations.push({
-        type: "weather",
-        title: "Cold Weather Notice",
-        description: "Freezing temperatures may affect biking comfort and scooter battery life",
-        priority: "medium",
-        icon: "❄️",
-        action: "View indoor alternatives",
-      })
-    }
-
-    if (weather.windSpeed > 15) {
-      recommendations.push({
-        type: "weather",
-        title: "High Wind Warning",
-        description: `${weather.windSpeed} mph winds detected. Biking and scooters may be affected`,
-        priority: "medium",
-        icon: "💨",
-        action: "Check wind-protected routes",
-      })
-    }
-
-    return recommendations
   }
 
   private static getTimeBasedRecommendations(
@@ -394,16 +337,16 @@ export class RecommendationsEngine {
     }
   }
 
-  static getQuickRecommendation(from: string, to: string, preferences: UserPreferences, weather: any): string {
-    const routes = TransportationCalculator.calculateAllRoutes(from, to, weather)
+  static getQuickRecommendation(from: string, to: string, preferences: UserPreferences): string {
+    const routes = TransportationCalculator.calculateAllRoutes(from, to)
 
     // Filter routes based on preferences
     const suitableRoutes = routes.filter((route) =>
-      UserPreferencesService.shouldRecommendMode(route.mode as any, preferences, weather),
+      UserPreferencesService.shouldRecommendMode(route.mode as any, preferences),
     )
 
     if (suitableRoutes.length === 0) {
-      return "No suitable routes found based on your current preferences and weather conditions."
+      return "No suitable routes found based on your current preferences."
     }
 
     // Score routes based on preferences
@@ -418,15 +361,6 @@ export class RecommendationsEngine {
     const modeLabel = this.getModeLabel(bestRoute.mode)
 
     let recommendation = `For your trip from ${from} to ${to}, I recommend ${modeLabel}.`
-
-    // Add context based on weather
-    if (weather.condition.includes("Rain") && bestRoute.mode === "bus") {
-      recommendation += " It's raining, so the bus will keep you dry."
-    } else if (weather.temperature > 85 && bestRoute.mode === "bus") {
-      recommendation += " It's hot outside, so the air-conditioned bus is your best bet."
-    } else if (bestRoute.mode === "walking" && weather.temperature < 75 && weather.temperature > 45) {
-      recommendation += " The weather is perfect for a pleasant walk."
-    }
 
     // Add time context
     recommendation += ` It should take about ${bestRoute.duration} minutes.`

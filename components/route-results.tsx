@@ -8,18 +8,38 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { TransportationCalculator } from "@/lib/transportation-calculator"
 import { UserPreferencesService } from "@/lib/user-preferences"
+export interface TransportDirection {
+  mode_of_transport: string
+  directions: string[]
+  estimated_time_minutes: number
+  distance_miles: number
+  estimated_cost: number
+  calories_burned: number
+  time_of_arrival: string
+  carbon_emissions_grams: number
+  reliability_percent: number
+  expanded: boolean
+}
+
+export interface DirectionsResponse {
+  directions: TransportDirection[]
+}
 
 interface RouteResultsProps {
+  allRoutesTemp: DirectionsResponse | null,
+  smartReply: string | null,
   fromLocation: string
   toLocation: string
   onClose: () => void
 }
 
-export function RouteResults({ fromLocation, toLocation, onClose }: RouteResultsProps) {
+export function RouteResults({ allRoutesTemp, smartReply, fromLocation, toLocation, onClose }: RouteResultsProps) {
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
   const [routes, setRoutes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [smartRecommendation, setSmartRecommendation] = useState<string>("")
+
+  const [allRoutes, setAllRoutes] = useState<DirectionsResponse>(allRoutesTemp || { directions: [] });
 
   useEffect(() => {
     const calculateRoutes = async () => {
@@ -162,11 +182,11 @@ export function RouteResults({ fromLocation, toLocation, onClose }: RouteResults
   }
 
   const toggleRouteExpansion = (routeId: string) => {
-    setRoutes(routes.map((route) => (route.id === routeId ? { ...route, expanded: !route.expanded } : route)))
+    setAllRoutes({"directions": allRoutes.directions.map((route) => (route.mode_of_transport === routeId ? { ...route, expanded: !route.expanded } : route))})
   }
 
   const getRouteIcon = (mode: string) => {
-    switch (mode) {
+    switch (mode.toLowerCase()) {
       case "walking":
         return "🚶"
       case "bus":
@@ -232,55 +252,55 @@ export function RouteResults({ fromLocation, toLocation, onClose }: RouteResults
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {smartRecommendation && (
+          {smartReply && (
             <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
               <div className="flex items-start gap-2">
                 <Star className="w-4 h-4 text-primary mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-primary">Smart Recommendation</p>
-                  <p className="text-sm text-muted-foreground">{smartRecommendation}</p>
+                  <p className="text-sm text-muted-foreground">{smartReply}</p>
                 </div>
               </div>
             </div>
           )}
 
-          {routes.length === 0 ? (
+          {!(allRoutes && allRoutes !== null) ? (
             <div className="text-center py-8 text-muted-foreground">
               <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p>No routes found. Please check your locations and try again.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {routes.map((route) => (
-                <Card key={route.id} className="overflow-hidden">
+              {allRoutes.directions.map((route) => (
+                <Card key={route.mode_of_transport} className="overflow-hidden">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="text-2xl">{getRouteIcon(route.mode)}</div>
+                        <div className="text-2xl">{getRouteIcon(route.mode_of_transport)}</div>
                         <div>
-                          <h3 className="font-semibold capitalize">{route.mode}</h3>
+                          <h3 className="font-semibold capitalize">{route.mode_of_transport}</h3>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
-                              {route.duration} min
+                              {route.estimated_time_minutes} min
                             </span>
                             <span className="flex items-center gap-1">
-                              <DollarSign className="w-3 h-3" />${route.cost.toFixed(2)}
+                              <DollarSign className="w-3 h-3" />{route.estimated_cost.toFixed(2)}
                             </span>
-                            <span>{route.distance}</span>
-                            {route.parkingTime && (
+                            <span>{route.distance_miles} miles</span>
+                            {/*route && (
                               <span className="flex items-center gap-1 text-orange-600">
                                 <Car className="w-3 h-3" />+{route.parkingTime}min parking
                               </span>
-                            )}
+                            )*/}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={getReliabilityColor(route.reliability)}>
-                          {route.reliability}% reliable
+                        <Badge variant="outline" className={getReliabilityColor(route.reliability_percent)}>
+                          {route.reliability_percent}% reliable
                         </Badge>
-                        <Button variant="ghost" size="icon" onClick={() => toggleRouteExpansion(route.id)}>
+                        <Button variant="ghost" size="icon" onClick={() => toggleRouteExpansion(route.mode_of_transport)}>
                           {route.expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </Button>
                       </div>
@@ -293,7 +313,7 @@ export function RouteResults({ fromLocation, toLocation, onClose }: RouteResults
                           <div>
                             <h4 className="font-medium mb-2">Route Details</h4>
                             <div className="space-y-1">
-                              {route.steps.map((step: string, index: number) => (
+                              {route.directions.map((step: string, index: number) => (
                                 <div key={index} className="flex items-start gap-2 text-sm">
                                   <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary mt-0.5">
                                     {index + 1}
@@ -310,14 +330,14 @@ export function RouteResults({ fromLocation, toLocation, onClose }: RouteResults
                                 <Leaf className="w-3 h-3" />
                               </div>
                               <div className="text-xs text-muted-foreground">Carbon</div>
-                              <div className="text-sm font-medium">{route.carbonFootprint.toFixed(1)} kg</div>
+                              <div className="text-sm font-medium">{route.carbon_emissions_grams.toFixed(1)} g</div>
                             </div>
                             <div>
                               <div className="flex items-center justify-center gap-1 text-orange-600 mb-1">
                                 <Zap className="w-3 h-3" />
                               </div>
                               <div className="text-xs text-muted-foreground">Calories</div>
-                              <div className="text-sm font-medium">{route.caloriesBurned}</div>
+                              <div className="text-sm font-medium">{route.calories_burned}</div>
                             </div>
                             <div>
                               <div className="flex items-center justify-center gap-1 text-blue-600 mb-1">
@@ -325,7 +345,7 @@ export function RouteResults({ fromLocation, toLocation, onClose }: RouteResults
                               </div>
                               <div className="text-xs text-muted-foreground">Arrival</div>
                               <div className="text-sm font-medium">
-                                {new Date(Date.now() + route.duration * 60000).toLocaleTimeString("en-US", {
+                                {new Date(Date.now() + route.estimated_time_minutes * 60000).toLocaleTimeString("en-US", {
                                   hour: "numeric",
                                   minute: "2-digit",
                                   hour12: true,

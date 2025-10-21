@@ -7,7 +7,7 @@ import { Search, MapPin, Navigation, ArrowUpDown, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { RouteResults } from "@/components/route-results"
+import { DirectionsResponse, RouteResults } from "@/components/route-results"
 import { UserPreferencesService } from "@/lib/user-preferences"
 
 const CAMPUS_LOCATIONS = [
@@ -280,10 +280,62 @@ export function RouteSearch() {
     "Riverside Dining Hall",
   ]
 
+  const [smartReply, setSmartReply] = useState<string | null>(null);
+    const [allRoutes, setAllRoutes] = useState<DirectionsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+
+
   const handleSearch = () => {
+    void (async() => {
     if (fromLocation && toLocation) {
+      const preferences = UserPreferencesService.getPreferences();
+      setLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Locations: (from: " + fromLocation  + ", to: " + toLocation + "), Preferences: " + JSON.stringify(preferences), type: "route_recommendation" }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error || `Request failed: ${res.status}`)
+      }
+
+      const data = await res.json()
+      //console.log(data.reply ?? "(no reply)")
+      setSmartReply(data.reply ?? "(no reply)")
+    } catch (err: any) {
+    } finally {
+    }
+
+
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Locations: (from: " + fromLocation  + ", to: " + toLocation + ")", type: "routing_info" }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error || `Request failed: ${res.status}`)
+      }
+
+      const data = await res.json()
+      console.log(data.reply ?? "(no reply)")
+      setAllRoutes(JSON.parse(data.reply));
+    } catch (err: any) {
+    } finally {
+      setLoading(false);
+    }
+
+
       setShowResults(true)
     }
+  })();
   }
 
   const swapLocations = () => {
@@ -397,8 +449,17 @@ export function RouteSearch() {
           </div>
 
           <Button className="w-full" size="lg" onClick={handleSearch}>
-            <Search className="w-4 h-4 mr-2" />
-            Find Routes
+            {loading ? (
+              <>
+                <Search className="w-4 h-4 mr-2 animate-spin" />
+                Finding routes...
+              </>
+            ) : (
+              <>
+                <Search className="w-4 h-4 mr-2" />
+                Find Routes
+              </>
+            )}
           </Button>
 
           {favoriteLocations.length > 0 && (
@@ -459,7 +520,19 @@ export function RouteSearch() {
       </Card>
 
       {showResults && (
-        <RouteResults fromLocation={fromLocation} toLocation={toLocation} onClose={() => setShowResults(false)} />
+        <>
+          {loading ? (
+            <div className="p-4 bg-muted rounded-md flex items-center gap-3 animate-pulse">
+              <Search className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="h-3 w-48 bg-border rounded" />
+                <div className="h-2 w-32 bg-border rounded mt-2" />
+              </div>
+            </div>
+          ) : (
+            <RouteResults allRoutesTemp={allRoutes} smartReply={smartReply} fromLocation={fromLocation} toLocation={toLocation} onClose={() => setShowResults(false)} />
+          )}
+        </>
       )}
     </div>
   )
